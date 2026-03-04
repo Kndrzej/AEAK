@@ -4,6 +4,8 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
+    private const string INTERACTABLE_TAG = "Interactable";
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float gravity = -9.81f;
@@ -12,6 +14,9 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float mouseSensitivity = 0.1f;
     [SerializeField] private Transform cameraHolder;
 
+    [Header("Interaction")]
+    [SerializeField] private float interactDistance = 3f;
+
     private CharacterController controller;
     private Vector2 moveInput;
     private Vector2 lookInput;
@@ -19,10 +24,11 @@ public class PlayerController : MonoBehaviour
     private float yVelocity;
     private float xRotation;
 
-    void Start()
+    private Outline currentOutline; // currently highlighted outline
+
+    private void Start()
     {
         controller = GetComponent<CharacterController>();
-
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -37,20 +43,37 @@ public class PlayerController : MonoBehaviour
         lookInput = value.Get<Vector2>();
     }
 
-    void Update()
+    public void OnInteract(InputValue value)
+    {
+        if (!value.isPressed) return;
+
+        Ray ray = new Ray(cameraHolder.position, cameraHolder.forward);
+        if (Physics.Raycast(ray, out RaycastHit hit, interactDistance))
+        {
+            // Try to get SkullPuzzle from hit object or its parents
+            SkullPuzzle puzzle = hit.collider.GetComponentInParent<SkullPuzzle>();
+            if (puzzle != null)
+            {
+                puzzle.TryRotateFromRaycast(hit.collider.transform);
+            }
+        }
+    }
+
+    private void Update()
     {
         Move();
         Look();
+        CheckInteractable();
     }
 
-    void Move()
+    private void Move()
     {
         Vector3 move = transform.right * moveInput.x +
                        transform.forward * moveInput.y;
 
         if (controller.isGrounded && yVelocity < 0)
         {
-            yVelocity = -2f; 
+            yVelocity = -2f;
         }
 
         yVelocity += gravity * Time.deltaTime;
@@ -61,7 +84,7 @@ public class PlayerController : MonoBehaviour
         controller.Move(velocity * Time.deltaTime);
     }
 
-    void Look()
+    private void Look()
     {
         float mouseX = lookInput.x * mouseSensitivity;
         float mouseY = lookInput.y * mouseSensitivity;
@@ -76,5 +99,33 @@ public class PlayerController : MonoBehaviour
     public Vector2 GetLookInput()
     {
         return lookInput;
+    }
+
+    private void CheckInteractable()
+    {
+        Ray ray = new Ray(cameraHolder.position, cameraHolder.forward);
+        if (Physics.Raycast(ray, out RaycastHit hit, interactDistance))
+        {
+            if (hit.collider.CompareTag(INTERACTABLE_TAG))
+            {
+                Outline outline = hit.collider.GetComponent<Outline>();
+                if (outline != null && outline != currentOutline)
+                {
+                    if (currentOutline != null)
+                        currentOutline.enabled = false;
+
+                    currentOutline = outline;
+                    currentOutline.enabled = true;
+                }
+                return;
+            }
+        }
+
+        // Disable outline if nothing is hit
+        if (currentOutline != null)
+        {
+            currentOutline.enabled = false;
+            currentOutline = null;
+        }
     }
 }
